@@ -1,0 +1,9 @@
+# Compiled output
+dist
+
+# Node.js dependencies
+node_modules
+package-lock.json
+
+# Config file
+.env
