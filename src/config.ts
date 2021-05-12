@@ -8,4 +8,8 @@ export const config = {
     secretKey: process.env.WYRE_API_SECRET_KEY,
     referrerAccountId: process.env.WYRE_REFERRER_ACCOUNT_ID,
   },
+
+  db: {
+    url: process.env.DB_URL,
+  },
 };

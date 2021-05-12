@@ -25,4 +25,12 @@ export class GetWidgetLinkDto {
     example: 'mmLrrESSuqD7qyK8ifiVgcy4TvS6JDrWoS',
   })
   destination: string;
+
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'URL which will be triggered when payment will complete/fail',
+    type: String,
+    example: 'https://example.com/webhook',
+  })
+  callbackUrl: string;
 }

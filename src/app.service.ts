@@ -4,15 +4,23 @@ import {
   InternalServerErrorException,
   OnApplicationBootstrap,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
 import * as crypto from 'crypto-js';
+import { Repository } from 'typeorm';
 
 import { config } from './config';
 import { GetWidgetLinkDto } from './dto/get-widget-link.dto';
+import { WalletOrderUpdateDto } from './dto/wallet-order-callback.dto';
+import { Webhook } from './models/webhook.entity';
 
 @Injectable()
 export class AppService implements OnApplicationBootstrap {
   private apiKey: string;
+
+  constructor(
+    @InjectRepository(Webhook) private webhookRepository: Repository<Webhook>,
+  ) {}
 
   async onApplicationBootstrap() {
     const res = await axios.post(
@@ -55,7 +63,7 @@ export class AppService implements OnApplicationBootstrap {
       referrerAccountId: config.api.referrerAccountId,
       destCurrency: dto.destinationCurrency,
       dest: destinationPrefix + ':' + dto.destination,
-      lockFields: ['dest', 'destCurrency'],
+      // lockFields: ['dest', 'destCurrency'],
     };
     dto.sourceCurrency && (body['sourceCurrency'] = dto.sourceCurrency);
 
@@ -74,18 +82,23 @@ export class AppService implements OnApplicationBootstrap {
       throw new InternalServerErrorException("Can't get widget URL");
     }
 
-    const u = `https://api.testwyre.com/v3/orders/lll?timestamp=${new Date().valueOf()}`;
-    console.log(
-      (
-        await axios.get(u, {
-          headers: {
-            'X-Api-Key': this.apiKey,
-            'X-Api-Signature': this.sign(u),
-          },
-        })
-      ).data,
-    );
+    const webhook = new Webhook(res.data.reservation, dto.callbackUrl);
+    await this.webhookRepository.save(webhook);
 
     return res.data.url as string;
+  }
+
+  async processWebhook(dto: WalletOrderUpdateDto) {
+    const webhook = await this.webhookRepository.findOne({
+      reservation: dto.reservation,
+    });
+
+    const body = {
+      orderStatus: dto.orderStatus,
+    };
+    dto.orderStatus === 'FAILED' && (body['message'] = dto.failedReason);
+    await axios.post(webhook.url, body);
+
+    console.log(webhook.url, body);
   }
 }
