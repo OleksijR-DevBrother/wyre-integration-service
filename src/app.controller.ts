@@ -2,19 +2,20 @@ import { Body, Controller, Post } from '@nestjs/common';
 import { ApiOperation } from '@nestjs/swagger';
 
 import { AppService } from './app.service';
-import { GetWidgetLinkDto } from './dto/get-widget-link.dto';
+import { CreateDepositDto } from './dto/create-deposit.dto';
 import { WalletOrderUpdateDto } from './dto/wallet-order-callback.dto';
 
-@Controller()
+@Controller('v1')
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  @Post('widget-link')
+  @Post('deposit/create')
   @ApiOperation({ summary: 'Get Wyre widget URL' })
-  async getWidgetLink(@Body() dto: GetWidgetLinkDto) {
+  async getWidgetLink(@Body() dto: CreateDepositDto) {
+    await this.appService.createDeposit(dto);
+
     return {
       success: true,
-      url: await this.appService.getWidgetUrl(dto),
     };
   }
 
@@ -24,5 +25,9 @@ export class AppController {
   })
   async walletOrderUpdate(@Body() dto: WalletOrderUpdateDto) {
     await this.appService.processWebhook(dto);
+
+    return {
+      success: true,
+    };
   }
 }

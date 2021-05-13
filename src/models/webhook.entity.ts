@@ -3,13 +3,17 @@ import { Column, Entity, PrimaryColumn } from 'typeorm';
 @Entity('webhooks')
 export class Webhook {
   @PrimaryColumn()
+  txid: string;
+
+  @PrimaryColumn()
   reservation: string;
 
   @Column()
-  url: string;
+  callback_url: string;
 
-  constructor(reservation: string, url: string) {
+  constructor(txid: string, reservation: string, callback_url: string) {
+    this.txid = txid;
     this.reservation = reservation;
-    this.url = url;
+    this.callback_url = callback_url;
   }
 }

@@ -9,6 +9,11 @@ export const config = {
     referrerAccountId: process.env.WYRE_REFERRER_ACCOUNT_ID,
   },
 
+  destinationAddresses: {
+    btc: process.env.WYRE_BTC_ADDRESS,
+    eth: process.env.WYRE_ETH_ADDRESS,
+  },
+
   db: {
     url: process.env.DB_URL,
   },

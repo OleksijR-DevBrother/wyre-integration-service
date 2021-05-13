@@ -10,7 +10,7 @@ import * as crypto from 'crypto-js';
 import { Repository } from 'typeorm';
 
 import { config } from './config';
-import { GetWidgetLinkDto } from './dto/get-widget-link.dto';
+import { CreateDepositDto } from './dto/create-deposit.dto';
 import { WalletOrderUpdateDto } from './dto/wallet-order-callback.dto';
 import { Webhook } from './models/webhook.entity';
 
@@ -40,8 +40,6 @@ export class AppService implements OnApplicationBootstrap {
   private sign(url: string, data: any = '') {
     data && (data = JSON.stringify(data));
 
-    console.log(url + data);
-
     return crypto.enc.Hex.stringify(
       crypto.HmacSHA256(url + data, config.api.secretKey),
     );
@@ -51,21 +49,27 @@ export class AppService implements OnApplicationBootstrap {
     btc: 'bitcoin',
     eth: 'ethereum',
   };
-  async getWidgetUrl(dto: GetWidgetLinkDto) {
+  async createDeposit(dto: CreateDepositDto) {
+    if (await this.webhookRepository.findOne({ txid: dto.txid })) {
+      throw new BadRequestException('TXID_ALREADY_EXIST');
+    }
+
     const destinationPrefix = this.destCurrencyToAddress[
-      dto.destinationCurrency.toLowerCase()
+      dto.product.toLowerCase()
     ];
     if (!destinationPrefix) {
-      throw new BadRequestException('Invalid destination currency');
+      throw new BadRequestException('PRODUCT_NOT_SUPPORTED');
     }
 
     const body = {
       referrerAccountId: config.api.referrerAccountId,
-      destCurrency: dto.destinationCurrency,
-      dest: destinationPrefix + ':' + dto.destination,
-      // lockFields: ['dest', 'destCurrency'],
+      destCurrency: dto.product,
+      dest:
+        destinationPrefix +
+        ':' +
+        config.destinationAddresses[dto.product.toLowerCase()],
+      lockFields: ['dest', 'destCurrency'],
     };
-    dto.sourceCurrency && (body['sourceCurrency'] = dto.sourceCurrency);
 
     const url = new URL(
       `/v3/orders/reserve?timestamp=${new Date().valueOf()}`,
@@ -79,13 +83,21 @@ export class AppService implements OnApplicationBootstrap {
     });
 
     if (!res.data.url) {
-      throw new InternalServerErrorException("Can't get widget URL");
+      throw new InternalServerErrorException("CAN'T_GET_IFRAME_URL");
     }
 
-    const webhook = new Webhook(res.data.reservation, dto.callbackUrl);
+    const webhook = new Webhook(
+      dto.txid,
+      res.data.reservation,
+      dto.callback_url,
+    );
     await this.webhookRepository.save(webhook);
 
-    return res.data.url as string;
+    await axios.post(webhook.callback_url, {
+      txid: webhook.txid,
+      status: 'PENDING',
+      iframe_url: res.data.url,
+    });
   }
 
   async processWebhook(dto: WalletOrderUpdateDto) {
@@ -94,11 +106,30 @@ export class AppService implements OnApplicationBootstrap {
     });
 
     const body = {
-      orderStatus: dto.orderStatus,
+      txid: webhook.txid,
+      status: dto.orderStatus,
     };
-    dto.orderStatus === 'FAILED' && (body['message'] = dto.failedReason);
-    await axios.post(webhook.url, body);
+    switch (dto.orderStatus) {
+      case 'PROCESSING':
+        return;
+      case 'COMPLETE':
+        const url = `https://api.testwyre.com/v3/orders/${
+          dto.orderId
+        }?timestamp=${new Date().valueOf()}`;
+        const res = await axios.get(url, {
+          headers: {
+            'X-Api-Key': this.apiKey,
+            'X-Api-Signature': this.sign(url),
+          },
+        });
 
-    console.log(webhook.url, body);
+        body.status = 'COMPLETED';
+        body['amount'] = res.data.purchaseAmount;
+        break;
+      case 'FAILED':
+        body['message'] = dto.failedReason;
+        break;
+    }
+    await axios.post(webhook.callback_url, body);
   }
 }
